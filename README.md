@@ -33,7 +33,7 @@ echo  -e 'ERROR\n<%%%%>\n' | mail -s "unicorn error" takeshy
 ## Installation
 
 ```
-go get github.com/takeshy/logmon-go
+go get github.com/shidax/logmon-go
 ```
 
 
