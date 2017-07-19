@@ -196,8 +196,8 @@ func convertToMonitor(confs []Watching) []Monitor {
 	for i := range confs {
 		mon := getOrCreateMonitor(mons, confs[i])
 		mon.Rule = append(mon.Rule, confs[i])
-		if !contains(mons, mon) {
-			mons = append(mons, mon)
+		if !contains(mons, *mon) {
+			mons = append(mons, *mon)
 		}
 	}
 	return mons
@@ -212,16 +212,16 @@ func contains(mons []Monitor, mon Monitor) bool {
 	return false
 }
 
-func getOrCreateMonitor(mons []Monitor, conf Watching) Monitor {
+func getOrCreateMonitor(mons []Monitor, conf Watching) *Monitor {
 	for i := range mons {
 		if mons[i].Path == conf.Path {
-			return mons[i]
+			return &mons[i]
 		}
 	}
 	mon := Monitor{}
 	mon.Path = conf.Path
 	mon.WaitMillisecond = conf.WaitMillisecond
-	return mon
+	return &mon
 }
 
 func main() {
