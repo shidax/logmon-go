@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/takeshy/tail"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -14,8 +13,18 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/takeshy/tail"
 )
 
+// Monitor is whole struct include some of Watching.
+type Monitor struct {
+	Path            string
+	WaitMillisecond int64
+	Rule            []Watching
+}
+
+// Watching expresse as a rule of monitor.
 type Watching struct {
 	Path            string
 	Target          *regexp.Regexp
@@ -145,6 +154,76 @@ func logMonitor(conf Watching) {
 	}
 }
 
+func multiLogMonitor(mon Monitor) {
+	c := tail.Watch(mon.Path)
+	var targetMessage string
+	var mutex sync.Mutex
+	for {
+		select {
+		case s := <-c:
+			for i := range mon.Rule {
+				conf := mon.Rule[i]
+				if targetMessage != "" {
+					mutex.Lock()
+					if targetMessage != "" {
+						targetMessage += ("\n" + escapeShell(s))
+					}
+					mutex.Unlock()
+				} else if conf.Target.MatchString(s) && (conf.Ignore == nil || !conf.Ignore.MatchString(s)) {
+					targetMessage += escapeShell(s)
+					if conf.WaitMillisecond == 0 {
+						executeCommand(conf, targetMessage)
+						targetMessage = ""
+					} else {
+						timer := time.NewTimer(time.Duration(conf.WaitMillisecond) * time.Millisecond)
+						go func() {
+							<-timer.C
+							mutex.Lock()
+							executeCommand(conf, targetMessage)
+							targetMessage = ""
+							mutex.Unlock()
+						}()
+					}
+				}
+			}
+		}
+
+	}
+}
+
+func convertToMonitor(confs []Watching) []Monitor {
+	mons := []Monitor{}
+	for i := range confs {
+		mon := getOrCreateMonitor(mons, confs[i])
+		mon.Rule = append(mon.Rule, confs[i])
+		if !contains(mons, *mon) {
+			mons = append(mons, *mon)
+		}
+	}
+	return mons
+}
+
+func contains(mons []Monitor, mon Monitor) bool {
+	for i := range mons {
+		if mons[i].Path == mon.Path {
+			return true
+		}
+	}
+	return false
+}
+
+func getOrCreateMonitor(mons []Monitor, conf Watching) *Monitor {
+	for i := range mons {
+		if mons[i].Path == conf.Path {
+			return &mons[i]
+		}
+	}
+	mon := Monitor{}
+	mon.Path = conf.Path
+	mon.WaitMillisecond = conf.WaitMillisecond
+	return &mon
+}
+
 func main() {
 	conf := flag.String("f", "/etc/logmon/logmon.conf", "config file(Default: /etc/logmon/logmon.conf)")
 	check := flag.Bool("c", false, "check config")
@@ -158,8 +237,10 @@ func main() {
 		}
 		return
 	}
-	for i := range confs {
-		go logMonitor(confs[i])
+
+	mons := convertToMonitor(confs)
+	for i := range mons {
+		go multiLogMonitor(mons[i])
 	}
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan,
