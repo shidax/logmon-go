@@ -156,13 +156,13 @@ func logMonitor(conf Watching) {
 
 func multiLogMonitor(mon Monitor) {
 	c := tail.Watch(mon.Path)
-	for i := range mon.Rule {
-		var targetMessage string
-		var mutex sync.Mutex
-		conf := mon.Rule[i]
-		for {
-			select {
-			case s := <-c:
+	var targetMessage string
+	var mutex sync.Mutex
+	for {
+		select {
+		case s := <-c:
+			for i := range mon.Rule {
+				conf := mon.Rule[i]
 				if targetMessage != "" {
 					mutex.Lock()
 					if targetMessage != "" {
@@ -205,7 +205,7 @@ func convertToMonitor(confs []Watching) []Monitor {
 
 func contains(mons []Monitor, mon Monitor) bool {
 	for i := range mons {
-		if &mons[i] == &mon {
+		if mons[i].Path == mon.Path {
 			return true
 		}
 	}
